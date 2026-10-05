@@ -295,17 +295,50 @@ För G ska ni:
 - uppdatera minst ett automatiskt test och få GitHub Actions grönt
 - svara på säkerhetsfrågorna
 
-### VG – återkalla gamla tokens när lösenordet byts
+### VG – JWT i HttpOnly-cookie
 
-Bygg en säker funktion för **Byt lösenord** för en inloggad användare.
+För VG ska ni bygga om inloggningen så att frontend aldrig kan läsa JWT:n. I stället ska Express skicka token som en cookie när användaren loggar in.
 
-1. Användaren skickar nuvarande lösenord och ett nytt lösenord. Kontrollera nuvarande lösenord med `bcrypt.compare()` och hasha det nya lösenordet innan databasen uppdateras.
-2. Lägg till en siffra, exempelvis `token_version`, på användaren i databasen. Sätt `tokenVersion` i JWT-payloaden vid inloggning.
-3. I `requireAuth` hämtar ni användaren från databasen och jämför tokenens `tokenVersion` med användarens aktuella `token_version`.
-4. När lösenordet byts ökar ni `token_version`. Alla tokens som utfärdades före lösenordsbytet ska då nekas, även om deras utgångstid inte har passerat.
-5. Skriv ett automatiskt test som visar att en gammal token inte längre fungerar efter lösenordsbytet.
+G-delen använder Bearer-token för att göra JWT-flödet tydligt. I denna del byter ni till ett vanligt alternativ för webbappar:
 
-Det här är ett exempel på varför kortlivade tokens och serverstyrd återkallelse kan behövas i en riktig app.
+```text
+Logga in
+    ↓
+Express skapar JWT och skickar Set-Cookie
+    ↓
+Webbläsaren sparar cookien
+    ↓
+Webbläsaren skickar cookien automatiskt vid API-anrop
+    ↓
+Express läser och verifierar JWT:n från cookien
+```
+
+1. Ändra inloggningsrouten så att den sätter en cookie, exempelvis `access_token`, med JWT:n. Cookien ska ha `httpOnly: true`, `sameSite: "lax"` och samma livslängd som token. `secure` ska vara `true` i produktion, där sajten körs med HTTPS.
+
+   ```js
+   res.cookie("access_token", token, {
+     httpOnly: true,
+     secure: process.env.NODE_ENV === "production",
+     sameSite: "lax",
+     maxAge: 15 * 60 * 1000,
+     path: "/",
+   });
+
+   res.json({ message: "Inloggningen lyckades" });
+   ```
+2. Ta bort token från JSON-svaret vid inloggning. Frontend ska inte spara token i React state, `localStorage` eller `sessionStorage`.
+3. Låt frontend använda `credentials: "include"` i sina `fetch`-anrop. Konfigurera CORS i Express med frontendens exakta adress och `credentials: true`; använd inte `origin: "*"` tillsammans med cookies.
+4. Ändra `requireAuth` så att den läser token från cookien och verifierar den på samma sätt som tidigare. Installera och använd `cookie-parser` om ni behöver läsa `req.cookies`.
+5. Skapa en `POST /logout`-route som rensar cookien. Rensa cookien med samma grundinställningar, till exempel samma `sameSite` och `path`, som när den sattes.
+6. Uppdatera frontend med en Logga ut-knapp som anropar `/logout` med `credentials: "include"` och skickar användaren till inloggningen.
+7. Uppdatera era automatiska tester. De ska visa att en inloggad användare kan se sitt konto via cookien och att utloggning gör att kontot inte längre går att hämta i samma webbläsare.
+
+Skriv också ett kort stycke i README där ni förklarar två saker:
+
+- `HttpOnly` gör att JavaScript på sidan inte kan läsa eller skicka iväg token direkt vid en XSS-sårbarhet.
+- Eftersom webbläsaren skickar cookies automatiskt behöver man tänka på CSRF. `SameSite: "lax"` ger ett grundskydd här, men en större app kan behöva ytterligare CSRF-skydd.
+
+Att rensa cookien loggar ut användaren i den aktuella webbläsaren, men återkallar inte automatiskt en kopierad JWT som fortfarande är giltig. Kortlivade tokens begränsar tiden en sådan token kan användas.
 
 ### Vidare läsning
 
