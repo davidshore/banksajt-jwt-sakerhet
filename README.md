@@ -47,9 +47,8 @@ Det räcker för att förstå flödet, men det är inte ett säkert sätt att ha
 
 - Ett läsbart lösenord i databasen blir synligt för alla som får tillgång till databasen.
 - En kort numerisk kod har för få möjliga värden för att fungera som en säker inloggningstoken.
-- Servern behöver kontrollera varje skyddat anrop, även om frontend råkar dölja en sida eller knapp.
 
-Ni ska ersätta lösenord i klartext med hashvärden och ersätta engångskoden med en JWT. Ni får behålla era befintliga routes om ni vill, men ändra hur de hanterar lösenord och inloggning.
+Ni ska ersätta lösenord i klartext med hashvärden och ersätta engångskoden med en JWT.
 
 ## Del 2 – Hasha lösenord med bcrypt
 
