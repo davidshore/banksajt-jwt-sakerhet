@@ -1,8 +1,6 @@
 # Workshop – JWT och säkrare inloggning i banken
 
-Förra veckorna har ni byggt en banksajt med Next.js, Express, MySQL, Docker Compose, tester och GitHub Actions. Den har registrering, inloggning och en kontosida där användaren kan se saldo och göra insättningar.
-
-I den här workshopen fortsätter ni i **samma bankprojekt**. Nu ska ni göra inloggningen säkrare genom att:
+I den här workshopen fortsätter ni med banksajten. Nu ska ni göra inloggningen säkrare genom att:
 
 1. spara lösenord som hashvärden i databasen
 2. skapa en JWT när användaren loggar in
