@@ -107,8 +107,6 @@ Skicka aldrig tillbaka lösenordet eller hashvärdet i ett API-svar. Använd sam
 
 Testa registreringen och kontrollera i databasen att ni ser en bcrypt-hash, inte lösenordet som skrevs i formuläret.
 
-Era gamla testanvändare har sannolikt lösenord i klartext. I er utvecklingsmiljö kan ni skapa om testanvändarna efter ändringen, eller hasha de befintliga lösenorden en gång. I en riktig app skulle användarna i stället få välja ett nytt lösenord.
-
 ## Del 3 – Skapa och kontrollera JWT
 
 En JWT består av:
