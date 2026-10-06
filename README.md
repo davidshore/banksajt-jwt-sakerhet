@@ -88,7 +88,11 @@ $2b$12$...
 
 Den är avsiktligt lång och innehåller ett unikt salt. Två användare med samma lösenord ska därför inte få exakt samma hashvärde.
 
-Om ni ändrar `database/init.sql` behöver ni också hantera er befintliga databas på datorn och på EC2. `init.sql` körs normalt bara när MySQL-volymen skapas första gången. Skriv därför en liten migration, eller skapa om er utvecklingsdatabas om den bara innehåller testdata.
+Om ni ändrar `database/init.sql` behöver ni också hantera er befintliga databas på datorn och på EC2. `init.sql` körs bara när MySQL-volymen skapas första gången. Återskapa därför er utvecklingsdatabas på Ec2 genom att ta bort den förra med:
+
+```bash
+docker compose down -v
+```
 
 ### Inloggning
 
@@ -175,39 +179,17 @@ if (!secret || Buffer.byteLength(secret, "utf8") < 32) {
 
 ### Middleware för skyddade routes
 
-Skapa en `requireAuth`-funktion. Den ska läsa token från headern `Authorization`, kontrollera signaturen och lägga användar-id:t på `req` när token är giltig.
+Skriv själva en middleware-funktion som heter `requireAuth` och tar emot `req`, `res` och `next`. Funktionen ska kontrollera inloggningen innan en skyddad route får köras.
 
-```js
-function requireAuth(req, res, next) {
-  const match = /^Bearer (.+)$/.exec(req.get("authorization") ?? "");
+Implementera följande steg:
 
-  if (!match) {
-    return res.status(401).json({ error: "Token saknas" });
-  }
+1. Läs headern `Authorization`, till exempel med `req.get("authorization")`. Kontrollera att den har formatet `Bearer <token>` och plocka ut själva tokenvärdet. Om headern saknas eller formatet är fel ska ni svara med status `401` och avbryta funktionen.
+2. Verifiera token med `jwt.verify()` och er signeringsnyckel `secret`. Ange `algorithms: ["HS256"]`, `issuer: "banken"` och `audience: "banken-api"`, så att verifieringen använder samma inställningar som när token skapades. `jwt.verify()` kontrollerar också tokenens utgångstid.
+3. Hantera verifieringen med `try`/`catch`. Om token är ogiltig eller har gått ut ska ni svara med status `401`, till exempel med felmeddelandet `"Ogiltig eller utgången token"`.
+4. Kontrollera att den verifierade payloaden är ett objekt och att `sub` är en sträng med ett användar-id. Omvandla id:t till ett tal med `Number()` och kontrollera med `Number.isSafeInteger()` att det är ett giltigt heltal. Kräv också att id:t är större än noll. Svara med status `401` om kontrollerna misslyckas.
+5. Lägg det kontrollerade användar-id:t i `req.userId`. Anropa sedan `next()` så att den skyddade routen får köras.
 
-  try {
-    const payload = jwt.verify(match[1], secret, {
-      algorithms: ["HS256"],
-      issuer: "banken",
-      audience: "banken-api",
-    });
-
-    if (typeof payload !== "object" || typeof payload.sub !== "string") {
-      return res.status(401).json({ error: "Ogiltig token" });
-    }
-
-    const userId = Number(payload.sub);
-    if (!Number.isSafeInteger(userId)) {
-      return res.status(401).json({ error: "Ogiltig token" });
-    }
-
-    req.userId = userId;
-    next();
-  } catch {
-    return res.status(401).json({ error: "Ogiltig eller utgången token" });
-  }
-}
-```
+Anropa aldrig `next()` när någon kontroll har misslyckats. Avsluta funktionen direkt efter ett felsvar, till exempel med `return`, så att den inte fortsätter till routen.
 
 Använd middleware-funktionen på alla routes som visar eller ändrar kontouppgifter. När ni har `req.userId` ska SQL-frågor använda det id:t. Ett id från request body får aldrig bestämma vilket konto som ska hämtas eller ändras.
 
@@ -244,8 +226,6 @@ Gör samma ändring för insättning och andra skyddade anrop. Lägg också till
 
 När token bara finns i React state försvinner den vid sidomladdning. Det är okej i den här uppgiften: användaren får logga in igen. Lägg inte token i `localStorage` för att få den att överleva en omladdning.
 
-En `HttpOnly`-cookie är ett vanligt alternativ i större appar. JavaScript kan då inte läsa token, men cookies kräver också ett medvetet skydd mot CSRF. Det ligger utanför denna uppgift.
-
 ## Del 5 – Testa hela flödet
 
 Testa lokalt före ni pushar:
@@ -266,12 +246,11 @@ Se till att er GitHub Actions-kedja fortfarande kör lint, build och tester. Tes
 Svara kort i ert projekts README:
 
 1. Varför kan du läsa en JWT-payload utan signeringsnyckeln, och vad skyddar signaturen?
-2. Varför använder servern `jwt.verify()` med en bestämd algoritm, `issuer` och `audience` i stället för att bara avkoda token?
-3. Vad händer om någon stjäl en giltig token innan den går ut? Stoppar en signatur den personen?
-4. Vad är skillnaden mellan att hasha ett lösenord och att signera en token?
-5. Vilken risk finns med att lagra en token i `localStorage` om sidan får en XSS-sårbarhet?
-6. Varför kan servern inte automatiskt veta att en JWT ska sluta gälla när användaren klickar på Logga ut?
-7. Vilka hemligheter finns i ert projekt, och var ska de lagras lokalt, i GitHub Actions och på EC2?
+2. Vad händer om någon stjäl en giltig token innan den går ut? Stoppar en signatur den personen?
+3. Vad är skillnaden mellan att hasha ett lösenord och att signera en token?
+4. Vilken risk finns med att lagra en token i `localStorage` om sidan får en XSS-sårbarhet?
+5. Varför kan servern inte automatiskt veta att en JWT ska sluta gälla när användaren klickar på Logga ut?
+6. Vilka hemligheter finns i ert projekt, och var ska de lagras lokalt, i GitHub Actions och på EC2?
 
 ## Inlämning och bedömning
 
@@ -282,18 +261,6 @@ Lämna in en länk till ert GitHub-repo. Lägg in följande i repots README:
 - hur ni kör testerna
 - svar på säkerhetsfrågorna
 - en länk till en grön GitHub Actions-körning
-
-### G
-
-För G ska ni:
-
-- hasha lösenord vid registrering och använda `bcrypt.compare()` vid inloggning
-- skapa en JWT med `sub`, utgångstid och en hemlig nyckel från miljövariabler
-- skicka JWT:n som Bearer-token från frontend
-- verifiera token innan backend visar saldo eller ändrar ett konto
-- ha en fungerande utloggningsknapp som rensar token från React state
-- uppdatera minst ett automatiskt test och få GitHub Actions grönt
-- svara på säkerhetsfrågorna
 
 ### VG – JWT i HttpOnly-cookie
 
@@ -326,19 +293,13 @@ Express läser och verifierar JWT:n från cookien
 
    res.json({ message: "Inloggningen lyckades" });
    ```
+
 2. Ta bort token från JSON-svaret vid inloggning. Frontend ska inte spara token i React state, `localStorage` eller `sessionStorage`.
 3. Låt frontend använda `credentials: "include"` i sina `fetch`-anrop. Konfigurera CORS i Express med frontendens exakta adress och `credentials: true`; använd inte `origin: "*"` tillsammans med cookies.
 4. Ändra `requireAuth` så att den läser token från cookien och verifierar den på samma sätt som tidigare. Installera och använd `cookie-parser` om ni behöver läsa `req.cookies`.
 5. Skapa en `POST /logout`-route som rensar cookien. Rensa cookien med samma grundinställningar, till exempel samma `sameSite` och `path`, som när den sattes.
 6. Uppdatera frontend med en Logga ut-knapp som anropar `/logout` med `credentials: "include"` och skickar användaren till inloggningen.
 7. Uppdatera era automatiska tester. De ska visa att en inloggad användare kan se sitt konto via cookien och att utloggning gör att kontot inte längre går att hämta i samma webbläsare.
-
-Skriv också ett kort stycke i README där ni förklarar två saker:
-
-- `HttpOnly` gör att JavaScript på sidan inte kan läsa eller skicka iväg token direkt vid en XSS-sårbarhet.
-- Eftersom webbläsaren skickar cookies automatiskt behöver man tänka på CSRF. `SameSite: "lax"` ger ett grundskydd här, men en större app kan behöva ytterligare CSRF-skydd.
-
-Att rensa cookien loggar ut användaren i den aktuella webbläsaren, men återkallar inte automatiskt en kopierad JWT som fortfarande är giltig. Kortlivade tokens begränsar tiden en sådan token kan användas.
 
 ### Vidare läsning
 
