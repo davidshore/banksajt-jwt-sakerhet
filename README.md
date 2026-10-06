@@ -37,7 +37,7 @@ Efter workshopen ska du kunna:
 - verifiera en JWT i Express innan en skyddad route körs
 - skicka en Bearer-token från Next.js till Express
 - förklara skillnaden mellan att avkoda och verifiera en JWT
-- hålla hemligheter utanför Git och ur källkoden
+- hålla hemligheter och lösenord utanför Git och ur källkoden
 
 ## Del 1 – Se vad som behöver ändras
 
